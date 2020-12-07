@@ -1,8 +1,17 @@
 import pickle
 import pandas as pd
-import torch
 import numpy as np
 from sklearn.preprocessing import normalize
+import argparse
+import sys
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-extract_project_code', action='store_true', default=False)
+parser.add_argument('-split_data', action='store_true', default=False)
+parser.add_argument('-to_csv', action='store_true', default=False)
+parser.add_argument('-project', type=str,
+                    default='qt')
 
 def prepare(pkl_data, csv_data, save_data, key=False):
     data = pickle.load(open(pkl_data, 'rb'))
@@ -55,18 +64,12 @@ def prepare_ftr(pkl_data, csv_data, save_data, key=False):
     with open(save_data, 'wb') as f:
         pickle.dump(ftr, f)
 
-def split_data(project):
-    # k_feature = pd.read_csv("eclipse/k_feature.csv")
-    # num = int(len(k_feature) * 0.8)
-    # k_feature[:num].to_csv('eclipse/train.csv', index=False)
-    # k_feature[num:].to_csv('eclipse/test.csv', index=False)
-
-    # k_feature = pd.read_csv("go/k_feature.csv")
-    k_feature = pd.read_csv("{}/m_feature.csv".format(project))
+def split_data(args):
+    k_feature = pd.read_csv("{}/{}_m_feature.csv".format(args.project, args.project))
 
     num = int(len(k_feature) * 0.8)
-    k_feature[:num].to_csv('{}/train.csv'.format(project), index=False)
-    k_feature[num:].to_csv('{}/test.csv'.format(project), index=False)
+    k_feature[:num].to_csv('{}/train.csv'.format(args.project), index=False)
+    k_feature[num:].to_csv('{}/test.csv'.format(args.project), index=False)
 
 
 if __name__ == "__main__":
@@ -90,7 +93,11 @@ if __name__ == "__main__":
     # # prepare(pkl_data, csv_data, save_data)
     # # prepare(pkl_data, csv_data, save_data, key=True)
     # prepare_ftr(pkl_data, csv_data, save_data, key=True)
+    args = parser.parse_args()
 
-    split_data('eclipse')
+    if len(sys.argv) < 2:
+        print('Usage: python gettit_extraction.py [model]')
+    elif args.split_data:
+        split_data(args)
 
 
