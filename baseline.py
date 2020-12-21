@@ -1,6 +1,9 @@
 import pickle
 from sklearn import preprocessing
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn import svm
 from sklearn.svm import SVR
 from sklearn import linear_model
@@ -8,6 +11,19 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_curve, auc
 from sklearn.preprocessing import normalize
+import argparse
+import sys
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('-split_data', action='store_true', default=False)
+parser.add_argument('-project', type=str,
+                    default='qt')
+parser.add_argument('-data', type=str,
+                    default='k')
+parser.add_argument('-algorithm', type=str,
+                    default='lr')
 
 def load_file(path_file):
     lines = list(open(path_file, 'r', encoding='utf8', errors='ignore').readlines())
@@ -59,6 +75,7 @@ def loading_variable(pname):
 
 def replace_value_dataframe(df):
     df = df.replace({True: 1, False: 0})
+    # df = df.fillna(df.mean()).drop(columns=['fix'])
     df = df.fillna(df.mean())
     return df.values
 
@@ -71,7 +88,7 @@ def loading_data(project):
 
 def get_features(data):
     # return the features of yasu data
-    return data[:, 5:32]
+    return data[:, 5:]
 
 
 def get_ids(data):
@@ -105,35 +122,39 @@ def load_df_yasu_data(path_data):
     return (ids, np.array(labels), features)
 
 
-def load_yasu_data(project):
-    train_path_data = './{}/train.csv'.format(project)
-    test_path_data = './{}/test.csv'.format(project)
+def load_yasu_data(args):
+    train_path_data = './{}/{}_train.csv'.format(args.project, args.data)
+    test_path_data = './{}/{}_test.csv'.format(args.project, args.data)
     train, test = load_df_yasu_data(train_path_data), load_df_yasu_data(test_path_data)
     return train, test
 
 
 
-def baseline_algorithm(train, test, algorihm):
+def baseline_algorithm(train, test, algorithm, hidden_layer_sizes=(20, 20)):
     _, y_train, X_train = train
     _, y_test, X_test = test
     X_train, X_test = preprocessing.scale(X_train), preprocessing.scale(X_test)
-    if algorihm == 'svr_rbf':
+    if algorithm == 'svr_rbf':
         model = SVR(kernel='rbf', C=1e3, gamma=0.1)
         y_pred = model.fit(X_train, y_train).predict(X_test)
-    elif algorihm == 'svr_poly':
+    elif algorithm == 'svr_poly':
         model = SVR(kernel='poly', C=1e3, degree=2)
         y_pred = model.fit(X_train, y_train).predict(X_test)
-    elif algorihm == 'lr':
-        model = LogisticRegression()
+    elif algorithm == 'lr':
+        model = LogisticRegression(max_iter=1000)
         y_pred = model.fit(X_train, y_train).predict_proba(X_test)[:, 1]
-    elif algorihm == 'svm':
+    elif algorithm == 'svm':
         model = svm.SVC(probability=True).fit(X_train, y_train)
         y_pred = model.fit(X_train, y_train).predict_proba(X_test)[:, 1]
-    elif algorihm == 'ridge':
+    elif algorithm == 'ridge':
         model = linear_model.Ridge()
+        y_pred = model.fit(X_train, y_train).predict(X_test)
+    elif algorithm =='mlp':
+        model = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes, max_iter=1000)
         y_pred = model.fit(X_train, y_train).predict(X_test)
     else:
         print('You need to give the correct algorithm name')
+        return
 
     acc, prc, rc, f1, auc_ = evaluation_metrics(y_true=y_test, y_pred=y_pred)
     print('Accuracy: %f -- Precision: %f -- Recall: %f -- F1: %f -- AUC: %f' % (acc, prc, rc, f1, auc_))
@@ -151,12 +172,14 @@ def baseline_algorithm(train, test, algorihm):
 
 
 if __name__ == '__main__':
-    # project = 'openstack'
-    project = 'eclipse'
-    # load training/testing data
-    train, test = load_yasu_data(project=project)
-    baseline_algorithm(train=train, test=test, algorihm='lr')
-    # baseline_algorithm(train=train, test=test, algorihm='svr_rbf')
-    # baseline_algorithm(train=train, test=test, algorihm='svr_poly')
-    # baseline_algorithm(train=train, test=test, algorihm='svm')
-    # baseline_algorithm(train=train, test=test, algorihm='ridge')
+    # baseline_algorithm(train=train, test=test, algorithm='svr_rbf')
+    # baseline_algorithm(train=train, test=test, algorithm='svr_poly')
+    # baseline_algorithm(train=train, test=test, algorithm='svm')
+    # baseline_algorithm(train=train, test=test, algorithm='ridge')
+    args = parser.parse_args()
+
+    if len(sys.argv) < 2:
+        print('Usage: python gettit_extraction.py [model]')
+
+    train, test = load_yasu_data(args)
+    baseline_algorithm(train=train, test=test, algorithm=args.algorithm, hidden_layer_sizes=(40,40))

@@ -7,11 +7,12 @@ import sys
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-extract_project_code', action='store_true', default=False)
+
 parser.add_argument('-split_data', action='store_true', default=False)
-parser.add_argument('-to_csv', action='store_true', default=False)
 parser.add_argument('-project', type=str,
                     default='qt')
+parser.add_argument('-data', type=str,
+                    default='k')
 
 def prepare(pkl_data, csv_data, save_data, key=False):
     data = pickle.load(open(pkl_data, 'rb'))
@@ -65,11 +66,11 @@ def prepare_ftr(pkl_data, csv_data, save_data, key=False):
         pickle.dump(ftr, f)
 
 def split_data(args):
-    k_feature = pd.read_csv("{}/{}_m_feature.csv".format(args.project, args.project))
+    k_feature = pd.read_csv("{}/{}_{}_feature.csv".format(args.project, args.project, args.data))
 
     num = int(len(k_feature) * 0.8)
-    k_feature[:num].to_csv('{}/train.csv'.format(args.project), index=False)
-    k_feature[num:].to_csv('{}/test.csv'.format(args.project), index=False)
+    k_feature[:num].to_csv('{}/{}_train.csv'.format(args.project, args.data), index=False)
+    k_feature[num:].to_csv('{}/{}_test.csv'.format(args.project, args.data), index=False)
 
 
 if __name__ == "__main__":
