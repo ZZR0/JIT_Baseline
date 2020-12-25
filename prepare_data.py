@@ -66,11 +66,12 @@ def prepare_ftr(pkl_data, csv_data, save_data, key=False):
         pickle.dump(ftr, f)
 
 def split_data(args):
-    k_feature = pd.read_csv("{}/{}_{}_feature.csv".format(args.project, args.project, args.data))
+    for year in range(2010,2020):
+        k_feature = pd.read_csv("data/{}/{}/{}_{}_feature.csv".format(args.project, year, args.project, args.data))
 
-    num = int(len(k_feature) * 0.8)
-    k_feature[:num].to_csv('{}/{}_train.csv'.format(args.project, args.data), index=False)
-    k_feature[num:].to_csv('{}/{}_test.csv'.format(args.project, args.data), index=False)
+        num = int(len(k_feature) * 0.8)
+        k_feature[:num].to_csv('data/{}/{}/{}_train.csv'.format(args.project, year, args.data), index=False)
+        k_feature[num:].to_csv('data/{}/{}/{}_test.csv'.format(args.project, year, args.data), index=False)
 
 
 if __name__ == "__main__":

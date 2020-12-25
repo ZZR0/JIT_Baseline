@@ -13,11 +13,14 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_c
 from sklearn.preprocessing import normalize
 import argparse
 import sys
+import time
+
+from torch.functional import Tensor
+from DBN import DBN
 
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('-split_data', action='store_true', default=False)
 parser.add_argument('-project', type=str,
                     default='qt')
 parser.add_argument('-data', type=str,
@@ -80,11 +83,6 @@ def replace_value_dataframe(df):
     return df.values
 
 
-def loading_data(project):
-    train, test = loading_variable(project + '_train'), loading_variable(project + '_test')
-    dictionary = (loading_variable(project + '_dict_msg'), loading_variable(project + '_dict_code'))
-    return train, test, dictionary
-
 
 def get_features(data):
     # return the features of yasu data
@@ -106,7 +104,7 @@ def load_df_yasu_data(path_data):
     data = pd.read_csv(path_data)
     data = replace_value_dataframe(df=data)
     ids, labels, features = get_ids(data=data), get_label(data=data), get_features(data=data)
-    indexes, new_ids, new_labels, new_features = list(), list(), list(), list()
+    indexes = list()
     cnt_noexits = 0
     for i in range(0, len(ids)):
         try:
@@ -123,52 +121,91 @@ def load_df_yasu_data(path_data):
 
 
 def load_yasu_data(args):
-    train_path_data = './{}/{}_train.csv'.format(args.project, args.data)
-    test_path_data = './{}/{}_test.csv'.format(args.project, args.data)
+    train_path_data = 'data/{}/{}/{}_train.csv'.format(args.project, args.year, args.data)
+    test_path_data = 'data/{}/{}/{}_test.csv'.format(args.project, args.year, args.data)
     train, test = load_df_yasu_data(train_path_data), load_df_yasu_data(test_path_data)
     return train, test
 
+def DBN_JIT(train_features, train_labels, test_features, test_labels, hidden_units=[20, 12, 12]):
+    # training DBN model
+    #################################################################################################
+    starttime = time.time()
+    dbn_model = DBN(visible_units=train_features.shape[1],
+                    hidden_units=hidden_units,
+                    use_gpu=False)
+    dbn_model.train_static(train_features, train_labels, num_epochs=10)
+    # Finishing the training DBN model
+    # print('---------------------Finishing the training DBN model---------------------')
+    # using DBN model to construct features
+    DBN_train_features, _ = dbn_model.forward(train_features)
+    DBN_test_features, _ = dbn_model.forward(test_features)
+    DBN_train_features = DBN_train_features.numpy()
+    DBN_test_features = DBN_test_features.numpy()
 
+    train_features = np.hstack((train_features, DBN_train_features))
+    test_features = np.hstack((test_features, DBN_test_features))
+
+
+    model = LogisticRegression(max_iter=1000).fit(train_features, train_labels)
+    endtime = time.time()
+    dtime = endtime - starttime
+    print("Train Time：%.8s s" % dtime)  #显示到微秒 
+
+    starttime = time.time()
+    y_pred = model.predict_proba(test_features)[:, 1]
+    endtime = time.time()
+    dtime = endtime - starttime
+    print("Eval Time：%.8s s" % dtime)  #显示到微秒 
+    return y_pred
 
 def baseline_algorithm(train, test, algorithm, hidden_layer_sizes=(20, 20)):
     _, y_train, X_train = train
     _, y_test, X_test = test
     X_train, X_test = preprocessing.scale(X_train), preprocessing.scale(X_test)
     if algorithm == 'svr_rbf':
-        model = SVR(kernel='rbf', C=1e3, gamma=0.1)
-        y_pred = model.fit(X_train, y_train).predict(X_test)
+        model = SVR(kernel='rbf', C=1e3, gamma=0.1).fit(X_train, y_train)
+        y_pred = model.predict(X_test)
     elif algorithm == 'svr_poly':
-        model = SVR(kernel='poly', C=1e3, degree=2)
-        y_pred = model.fit(X_train, y_train).predict(X_test)
+        model = SVR(kernel='poly', C=1e3, degree=2).fit(X_train, y_train)
+        y_pred = model.predict(X_test)
     elif algorithm == 'lr':
-        model = LogisticRegression(max_iter=1000)
-        y_pred = model.fit(X_train, y_train).predict_proba(X_test)[:, 1]
+        starttime = time.time()
+        model = LogisticRegression(max_iter=1000).fit(X_train, y_train)
+        endtime = time.time()
+        dtime = endtime - starttime
+        print("Train Time：%.8s s" % dtime)  #显示到微秒 
+
+        starttime = time.time()
+        y_pred = model.predict_proba(X_test)[:, 1]
+        endtime = time.time()
+        dtime = endtime - starttime
+        print("Eval Time：%.8s s" % dtime)  #显示到微秒 
     elif algorithm == 'svm':
         model = svm.SVC(probability=True).fit(X_train, y_train)
-        y_pred = model.fit(X_train, y_train).predict_proba(X_test)[:, 1]
+        y_pred = model.predict_proba(X_test)[:, 1]
     elif algorithm == 'ridge':
-        model = linear_model.Ridge()
-        y_pred = model.fit(X_train, y_train).predict(X_test)
+        model = linear_model.Ridge().fit(X_train, y_train)
+        y_pred = model.predict(X_test)
     elif algorithm =='mlp':
-        model = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes, max_iter=1000)
-        y_pred = model.fit(X_train, y_train).predict(X_test)
+        model = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes, max_iter=1000).fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+    elif algorithm =='dbn':
+        y_pred = DBN_JIT(X_train, y_train, X_test, y_test)
     else:
         print('You need to give the correct algorithm name')
         return
 
     acc, prc, rc, f1, auc_ = evaluation_metrics(y_true=y_test, y_pred=y_pred)
     print('Accuracy: %f -- Precision: %f -- Recall: %f -- F1: %f -- AUC: %f' % (acc, prc, rc, f1, auc_))
-    eval(y_test, y_pred, thresh=0.1)
-    eval(y_test, y_pred, thresh=0.2)
-    eval(y_test, y_pred, thresh=0.3)
-    eval(y_test, y_pred, thresh=0.4)
-    eval(y_test, y_pred, thresh=0.5)
-    eval(y_test, y_pred, thresh=0.6)
-    eval(y_test, y_pred, thresh=0.7)
-    eval(y_test, y_pred, thresh=0.8)
-    eval(y_test, y_pred, thresh=0.9)
-
-
+    # eval(y_test, y_pred, thresh=0.1)
+    # eval(y_test, y_pred, thresh=0.2)
+    # eval(y_test, y_pred, thresh=0.3)
+    # eval(y_test, y_pred, thresh=0.4)
+    # eval(y_test, y_pred, thresh=0.5)
+    # eval(y_test, y_pred, thresh=0.6)
+    # eval(y_test, y_pred, thresh=0.7)
+    # eval(y_test, y_pred, thresh=0.8)
+    # eval(y_test, y_pred, thresh=0.9)
 
 
 if __name__ == '__main__':
@@ -181,5 +218,10 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Usage: python gettit_extraction.py [model]')
 
-    train, test = load_yasu_data(args)
-    baseline_algorithm(train=train, test=test, algorithm=args.algorithm, hidden_layer_sizes=(40,40))
+    for year in range(2010,2020):
+        print('Year:', year)
+        args.year = year
+        train, test = load_yasu_data(args)
+        
+        baseline_algorithm(train=train, test=test, algorithm=args.algorithm, hidden_layer_sizes=(40,40))
+
