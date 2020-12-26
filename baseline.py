@@ -14,6 +14,11 @@ from sklearn.preprocessing import normalize
 import argparse
 import sys
 import time
+from LR import LR
+import torch.nn as nn
+import torch
+import math
+
 
 from torch.functional import Tensor
 from DBN import DBN
@@ -58,6 +63,60 @@ def eval(labels, predicts, thresh=0.5):
     except Exception:
         # division by zero
         pass
+
+def mini_batches_update(X, Y, mini_batch_size=64, seed=0):
+    m = X.shape[0]  # number of training examples
+    mini_batches = list()
+    np.random.seed(seed)
+
+    # Step 1: No shuffle (X, Y)
+    shuffled_X, shuffled_Y = X, Y
+    Y = Y.tolist()
+    Y_pos = [i for i in range(len(Y)) if Y[i] == 1]
+    Y_neg = [i for i in range(len(Y)) if Y[i] == 0]
+
+    # Step 2: Randomly pick mini_batch_size / 2 from each of positive and negative labels
+    num_complete_minibatches = int(math.floor(m / float(mini_batch_size))) + 1
+    for k in range(0, num_complete_minibatches):
+        indexes = sorted(
+            random.sample(Y_pos, int(mini_batch_size / 2)) + random.sample(Y_neg, int(mini_batch_size / 2)))
+        mini_batch_X, mini_batch_Y = shuffled_X[indexes], shuffled_Y[indexes]
+        mini_batch = (mini_batch_X, mini_batch_Y)
+        mini_batches.append(mini_batch)
+    return mini_batches
+
+
+def mini_batches(X, Y, mini_batch_size=64, seed=0):
+    m = X.shape[0]  # number of training examples
+    mini_batches = list()
+    np.random.seed(seed)
+
+    # Step 1: No shuffle (X, Y)
+    shuffled_X, shuffled_Y = X, Y
+
+    # Step 2: Partition (X, Y). Minus the end case.
+    # number of mini batches of size mini_batch_size in your partitioning
+    num_complete_minibatches = int(math.floor(m / float(mini_batch_size)))
+
+    for k in range(0, num_complete_minibatches):
+        mini_batch_X = shuffled_X[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
+        if len(Y.shape) == 1:
+            mini_batch_Y = shuffled_Y[k * mini_batch_size: k * mini_batch_size + mini_batch_size]
+        else:
+            mini_batch_Y = shuffled_Y[k * mini_batch_size: k * mini_batch_size + mini_batch_size, :]
+        mini_batch = (mini_batch_X, mini_batch_Y)
+        mini_batches.append(mini_batch)
+
+    # Handling the end case (last mini-batch < mini_batch_size)
+    if m % mini_batch_size != 0:
+        mini_batch_X = shuffled_X[num_complete_minibatches * mini_batch_size: m, :]
+        if len(Y.shape) == 1:
+            mini_batch_Y = shuffled_Y[num_complete_minibatches * mini_batch_size: m]
+        else:
+            mini_batch_Y = shuffled_Y[num_complete_minibatches * mini_batch_size: m, :]
+        mini_batch = (mini_batch_X, mini_batch_Y)
+        mini_batches.append(mini_batch)
+    return mini_batches
 
 def evaluation_metrics(y_true, y_pred):
     fpr, tpr, thresholds = roc_curve(y_true=y_true, y_score=y_pred, pos_label=1)
@@ -126,7 +185,7 @@ def load_yasu_data(args):
     train, test = load_df_yasu_data(train_path_data), load_df_yasu_data(test_path_data)
     return train, test
 
-def DBN_JIT(train_features, train_labels, test_features, test_labels, hidden_units=[20, 12, 12]):
+def DBN_JIT(train_features, train_labels, test_features, test_labels, hidden_units=[20, 12, 12], num_epochs_LR=200):
     # training DBN model
     #################################################################################################
     starttime = time.time()
@@ -144,6 +203,44 @@ def DBN_JIT(train_features, train_labels, test_features, test_labels, hidden_uni
 
     train_features = np.hstack((train_features, DBN_train_features))
     test_features = np.hstack((test_features, DBN_test_features))
+
+
+    if len(train_labels.shape) == 1:
+        num_classes = 1
+    else:
+        num_classes = train_labels.shape[1]
+    # lr_model = LR(input_size=hidden_units, num_classes=num_classes)
+    lr_model = LR(input_size=train_features.shape[1], num_classes=num_classes)
+    optimizer = torch.optim.Adam(lr_model.parameters(), lr=0.00001)
+    steps = 0
+    batches_test = mini_batches(X=test_features, Y=test_labels)
+    for epoch in range(1, num_epochs_LR + 1):
+        # building batches for training model
+        batches_train = mini_batches_update(X=train_features, Y=train_labels)
+        for batch in batches_train:
+            x_batch, y_batch = batch
+            if torch.cuda.is_available():
+                x_batch, y_batch = torch.tensor(x_batch).cuda(), torch.cuda.FloatTensor(y_batch)
+            else:
+                x_batch, y_batch = torch.tensor(x_batch).float(), torch.tensor(y_batch).float()
+
+            optimizer.zero_grad()
+            predict = lr_model.forward(x_batch)
+            loss = nn.BCELoss()
+            loss = loss(predict, y_batch)
+            loss.backward()
+            optimizer.step()
+
+            steps += 1
+            if steps % 10 == 0:
+                print('\rEpoch: {} step: {} - loss: {:.6f}'.format(epoch, steps, loss.item()))
+
+        print('Epoch: %i ---Training data' % (epoch))
+        acc, prc, rc, f1, auc_ = eval(data=batches_train, model=lr_model)
+        print('Accuracy: %f -- Precision: %f -- Recall: %f -- F1: %f -- AUC: %f' % (acc, prc, rc, f1, auc_))
+        print('Epoch: %i ---Testing data' % (epoch))
+        acc, prc, rc, f1, auc_ = eval(data=batches_test, model=lr_model)
+        print('Accuracy: %f -- Precision: %f -- Recall: %f -- F1: %f -- AUC: %f' % (acc, prc, rc, f1, auc_))
 
 
     model = LogisticRegression(max_iter=1000).fit(train_features, train_labels)

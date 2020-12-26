@@ -192,8 +192,7 @@ class RBM(nn.Module):
             cost_ = torch.FloatTensor(n_batches, 1)
             grad_ = torch.FloatTensor(n_batches, 1)
 
-            for i, (batch, _) in tqdm(enumerate(train_loader), ascii=True,
-                                      desc="RBM fitting", file=sys.stdout):
+            for i, (batch, _) in enumerate(train_loader):
 
                 batch = batch.view(len(batch), self.visible_units)
 
@@ -201,10 +200,10 @@ class RBM(nn.Module):
                     batch = batch.cuda()
                 cost_[i - 1], grad_[i - 1] = self.step(batch, epoch, num_epochs)
 
-            print("Epoch:{} ,avg_cost = {} ,std_cost = {} ,avg_grad = {} ,std_grad = {}".format(epoch, \
-                                                                                                torch.mean(cost_), \
-                                                                                                torch.std(cost_), \
-                                                                                                torch.mean(grad_), \
-                                                                                                torch.std(grad_)))
+            # print("Epoch:{} ,avg_cost = {} ,std_cost = {} ,avg_grad = {} ,std_grad = {}".format(epoch, \
+            #                                                                                     torch.mean(cost_), \
+            #                                                                                     torch.std(cost_), \
+            #                                                                                     torch.mean(grad_), \
+            #                                                                                     torch.std(grad_)))
 
         return

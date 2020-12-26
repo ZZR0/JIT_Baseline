@@ -94,8 +94,8 @@ class DBN(nn.Module):
         tmp = train_data
 
         for i in range(len(self.rbm_layers)):
-            print("-" * 20)
-            print("Training the {} st rbm layer".format(i + 1))
+            # print("-" * 20)
+            # print("Training the {} st rbm layer".format(i + 1))
 
             if torch.cuda.is_available():
                 tensor_x, tensor_y = torch.tensor(tmp).cuda(), torch.cuda.FloatTensor(train_labels)
@@ -123,7 +123,7 @@ class DBN(nn.Module):
         can be used for fine tuning
         '''
         if (ith_layer - 1 > len(self.rbm_layers) or ith_layer <= 0):
-            print("Layer index out of range")
+            # print("Layer index out of range")
             return
         ith_layer = ith_layer - 1
         v = train_data.view((train_data.shape[0], -1)).type(torch.FloatTensor)

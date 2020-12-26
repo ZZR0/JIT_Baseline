@@ -65,13 +65,22 @@ def prepare_ftr(pkl_data, csv_data, save_data, key=False):
     with open(save_data, 'wb') as f:
         pickle.dump(ftr, f)
 
+# def split_data(args):
+#     for year in range(2010,2020):
+#         k_feature = pd.read_csv("data/{}/{}/{}_{}_feature.csv".format(args.project, year, args.project, args.data))
+
+#         num = int(len(k_feature) * 0.8)
+#         k_feature[:num].to_csv('data/{}/{}/{}_train.csv'.format(args.project, year, args.data), index=False)
+#         k_feature[num:].to_csv('data/{}/{}/{}_test.csv'.format(args.project, year, args.data), index=False)
+
+
 def split_data(args):
-    for year in range(2010,2020):
-        k_feature = pd.read_csv("data/{}/{}/{}_{}_feature.csv".format(args.project, year, args.project, args.data))
+    for size in ['10k', '50k']:
+        k_feature = pd.read_csv("data/{}/{}/{}_{}_feature.csv".format(args.project, size, args.project, args.data))
 
         num = int(len(k_feature) * 0.8)
-        k_feature[:num].to_csv('data/{}/{}/{}_train.csv'.format(args.project, year, args.data), index=False)
-        k_feature[num:].to_csv('data/{}/{}/{}_test.csv'.format(args.project, year, args.data), index=False)
+        k_feature[:num].to_csv('data/{}/{}/{}_train.csv'.format(args.project, size, args.data), index=False)
+        k_feature[num:].to_csv('data/{}/{}/{}_test.csv'.format(args.project, size, args.data), index=False)
 
 
 if __name__ == "__main__":
