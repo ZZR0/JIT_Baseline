@@ -22,3 +22,24 @@ class LR(nn.Module):
         out = self.fc(input_size)
         out = self.sigmoid(out).squeeze(1)
         return out
+
+    def predict(self, data):
+        with torch.no_grad():
+            self.eval()  # since we use drop out
+            all_predict, all_label = list(), list()
+            for batch in data:
+                x, y = batch
+                if torch.cuda.is_available():
+                    x = torch.tensor(x).cuda()
+                else:
+                    x = torch.tensor(x).float()
+
+                if torch.cuda.is_available():
+                    predict = self.forward(x).cpu().detach().numpy().tolist()
+                else:
+                    predict = self.forward(x).detach().numpy().tolist()
+                all_predict += predict
+                all_label += y.tolist()
+            # acc, prc, rc, f1, auc_ = evaluation_metrics(y_pred=all_predict, y_true=all_label)
+            # print('Accuracy: %f -- Precision: %f -- Recall: %f -- F1: %f -- AUC: %f' % (acc, prc, rc, f1, auc_))
+            return all_predict, all_label
